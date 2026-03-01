@@ -7,8 +7,8 @@
 
 <br>
 
-#1 "proc.h": proc 구조체에 priority와 age 변수 추가.  
-#2 "proc.c": 프로세스 우선순위 지정 함수(set_proc_priority), 프로세스 우선순위 리턴 함수(get_proc_priority), 프로세스 age 값 리턴 함수(get_proc_age) 추가 및 우선순위에 따른 스케줄링.  
+#1 "proc.c": 프로세스 우선순위 지정 함수(set_proc_priority), 프로세스 우선순위 리턴 함수(get_proc_priority), 프로세스 age 값 리턴 함수(get_proc_age) 추가 및 우선순위에 따른 스케줄링.   
+#2 "proc.h": proc 구조체에 priority와 age 변수 추가.   
 #3 "syscall.c": sys_set_proc_priority, sys_get_proc_priority, sys_get_proc_age 시스템 콜 선언 및 시스템 콜 번호와 함수 매핑.  
 #4 "syscall.h": set_proc_priority, get_proc_priority, get_proc_age의 system call 번호를 각각 23, 24, 25로 설정.  
 #5 "sysfile.c": sys_set_proc_priority, sys_get_proc_priority, sys_get_proc_age 함수를 추가.  
