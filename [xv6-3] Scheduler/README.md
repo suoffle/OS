@@ -7,13 +7,13 @@
 
 <br>
 
-#1 "proc.h": proc 구조체에 priority와 age 변수 추가.
-#2 "proc.c": 프로세스 우선순위 지정 함수(set_proc_priority), 프로세스 우선순위 리턴 함수(get_proc_priority), 프로세스 age 값 리턴 함수(get_proc_age) 추가 및 우선순위에 따른 스케줄링.
-#3 "syscall.c": sys_set_proc_priority, sys_get_proc_priority, sys_get_proc_age 시스템 콜 선언 및 시스템 콜 번호와 함수 매핑.
-#4 "syscall.h": set_proc_priority, get_proc_priority, get_proc_age의 system call 번호를 각각 23, 24, 25로 설정.
-#5 "sysfile.c": sys_set_proc_priority, sys_get_proc_priority, sys_get_proc_age 함수를 추가.
-#6 "defs.h": set_proc_priority, get_proc_priority, get_proc_age 함수 추가.
-#7 "user.h": set_proc_priority, get_proc_priority, get_proc_age의 함수 원형 정의.
-#8 "usys.S": set_proc_priority, get_proc_priority, get_proc_age에 해당하는 매크로를 추가.
-#9 "userapplication.c": 서로 다른 우선순위의 프로세스 실행 프로그램. starvation 상황과 starvation 해결 결과 확인 코드.
+#1 "proc.h": proc 구조체에 priority와 age 변수 추가.  
+#2 "proc.c": 프로세스 우선순위 지정 함수(set_proc_priority), 프로세스 우선순위 리턴 함수(get_proc_priority), 프로세스 age 값 리턴 함수(get_proc_age) 추가 및 우선순위에 따른 스케줄링.  
+#3 "syscall.c": sys_set_proc_priority, sys_get_proc_priority, sys_get_proc_age 시스템 콜 선언 및 시스템 콜 번호와 함수 매핑.  
+#4 "syscall.h": set_proc_priority, get_proc_priority, get_proc_age의 system call 번호를 각각 23, 24, 25로 설정.  
+#5 "sysfile.c": sys_set_proc_priority, sys_get_proc_priority, sys_get_proc_age 함수를 추가.  
+#6 "defs.h": set_proc_priority, get_proc_priority, get_proc_age 함수 추가.  
+#7 "user.h": set_proc_priority, get_proc_priority, get_proc_age의 함수 원형 정의.  
+#8 "usys.S": set_proc_priority, get_proc_priority, get_proc_age에 해당하는 매크로를 추가.  
+#9 "userapplication.c": 서로 다른 우선순위의 프로세스 실행 프로그램. starvation 상황과 starvation 해결 결과 확인 코드.  
 
