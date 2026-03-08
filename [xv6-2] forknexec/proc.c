@@ -542,34 +542,37 @@ int forknexec(const char *path, const char **args)
 	  struct proc *np;
 	  struct proc *curproc = myproc();
 
-	  // Allocate process.
+	  // Allocate process.(child)
 	  if((np = allocproc()) == 0){
 	    return -2;
 	  }
 
 	  // Copy process state from proc.
+	  // parent process user memory copy.
 	  if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
 	    kfree(np->kstack);
 	    np->kstack = 0;
 	    np->state = UNUSED;
 	    return -2;
 	  }
-	  np->sz = curproc->sz;
-	  np->parent = curproc;
-	  *np->tf = *curproc->tf;
-	  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+
+	  np->sz = curproc->sz;		// parent: user memory size
+	  np->parent = curproc;		// child->parent = parent
+	  *np->tf = *curproc->tf;	// parent register state
+	  safestrcpy(np->name, curproc->name, sizeof(curproc->name));	// parent process name
 	  // Clear %eax so that fork returns 0 in the child.
 	  np->tf->eax = 0;
 
+	  //Open file descriptor copy
 	  for(i = 0; i < NOFILE; i++)
 	    if(curproc->ofile[i])
 	      np->ofile[i] = filedup(curproc->ofile[i]);
-	  np->cwd = idup(curproc->cwd);
+	  np->cwd = idup(curproc->cwd);		// current working directory
 
 	  //pid = np->pid;
-	  curproc=np;
+	  curproc=np; 
 /*
-	//스케줄러가 대신 해주는 부분이라 생략
+	//추가 처리 과정 이후 실행해야하는 코드여서 주석처리.
 	  acquire(&ptable.lock);
 	  np->state = RUNNABLE;
 	  release(&ptable.lock);
@@ -601,28 +604,28 @@ int forknexec(const char *path, const char **args)
 	  if(elf.magic != ELF_MAGIC)
 	    goto bad;
 
-	  if((pgdir = setupkvm()) == 0)
+	  if((pgdir = setupkvm()) == 0)		// new kernel page table
 	    goto bad;
 
 	  // Load program into memory.
 	  sz = 0;
 	  for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
-	    if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
+	    if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))	// read elf program header
 	      goto bad;
-	    if(ph.type != ELF_PROG_LOAD)
+	    if(ph.type != ELF_PROG_LOAD)	
 	      continue;
 	    if(ph.memsz < ph.filesz)
 	      goto bad;
-	    if(ph.vaddr + ph.memsz < ph.vaddr)
+	    if(ph.vaddr + ph.memsz < ph.vaddr)	// overflow?
 	      goto bad;
-	    if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0)
+	    if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0)	// user virtual memory 
 	      goto bad;
 	    if(ph.vaddr % PGSIZE != 0)
 	      goto bad;
 	    if(loaduvm(pgdir, (char*)ph.vaddr, ip, ph.off, ph.filesz) < 0)
 	      goto bad;
 	  }
-	  iunlockput(ip);
+	  iunlockput(ip);	// inode unlock, ref--
 	  end_op();
 	  ip = 0;
 
@@ -635,24 +638,24 @@ int forknexec(const char *path, const char **args)
 	  sp = sz;
 
 
-	  // Push argument strings, prepare rest of stack in ustack.
+	  // Push argument strings, prepare rest of stack in ustack.(child user stack)
 	  for(argc = 0; args[argc]; argc++) {
 	    if(argc >= MAXARG)
 	      return -1;	//인자가 MAXARG 이상인 경우 오류 처리(-1)
 	      
-	    sp = (sp - (strlen(args[argc]) + 1)) & ~3;
+	    sp = (sp - (strlen(args[argc]) + 1)) & ~3;		
 	    if(copyout(pgdir, sp, (void*)args[argc], strlen(args[argc]) + 1) < 0)
 	      goto bad;
-	    ustack[3+argc] = sp;
+	    ustack[3+argc] = sp;	// argv(문자열) 주소 저장
 	  }
-	  ustack[3+argc] = 0;
+	  ustack[3+argc] = 0;	// argv 마지막은 NULL
 
-	  ustack[0] = 0xffffffff;  // fake return PC
-	  ustack[1] = argc;
+	  ustack[0] = 0xffffffff;   // fake return PC
+	  ustack[1] = argc;			
 	  ustack[2] = sp - (argc+1)*4;  // args pointer
 
 	  sp -= (3+argc+1) * 4;
-	  if(copyout(pgdir, sp, ustack, (3+argc+1)*4) < 0)
+	  if(copyout(pgdir, sp, ustack, (3+argc+1)*4) < 0)	// ustack 배열 -> user memory에 복사
 	    goto bad;
 
 	  // Save program name for debugging.
@@ -662,26 +665,26 @@ int forknexec(const char *path, const char **args)
 	  safestrcpy(curproc->name, last, sizeof(curproc->name));
 
 	  // Commit to the user image.
-	  oldpgdir = curproc->pgdir;
-	  curproc->pgdir = pgdir;
-	  curproc->sz = sz;
-	  curproc->tf->eip = elf.entry;  // main
-	  curproc->tf->esp = sp;
+	  oldpgdir = curproc->pgdir;		// parent process memory 백업
+	  curproc->pgdir = pgdir;			// child process의 메모리로 갱신
+	  curproc->sz = sz;					// child process memory size
+	  curproc->tf->eip = elf.entry;  	// main(eip)
+	  curproc->tf->esp = sp;			// user stack(esp)
 	  
 	  int saved_pid=curproc->pid;
 	  
-	  //현재 process에 다시 부모 process로 바꿔주기
+	  // activate child process virtual memory
 	  switchuvm(curproc);
 	  freevm(oldpgdir);
 
-	 //parent process 다시 실행
+	 // child process -> RUNNABLE(주석 처리된 부분이 해당 위치에서 실행)
 	  acquire(&ptable.lock);
 	  curproc->state = RUNNABLE;
 	  release(&ptable.lock);
 	  
 	  wait(); //avoid zombie
-	  //자식 pid return
-	  return saved_pid;
+	  
+	  return saved_pid;  	//자식 pid return
 
 	 bad:
 	  if(pgdir)
