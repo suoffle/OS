@@ -8,6 +8,7 @@
 <br>
 
 #1 "proc.c": 
+  - userinit(): 프로세스의 priority는 5, age는 0으로 초기화하는 코드를 추가하였다.
   - set_proc_priority(): 프로세스 우선순위 지정 함수를 추가하였다.
   - get_proc_priority(): 프로세스 우선순위 리턴 함수를 추가하였다.
   - get_proc_age(): 프로세스 age 값 리턴 함수를 추가하였다.
@@ -27,5 +28,5 @@
 
 #8 "usys.S": set_proc_priority, get_proc_priority, get_proc_age에 해당하는 매크로를 추가.  
 
-#9 "userapplication.c": 서로 다른 우선순위의 프로세스 실행 프로그램. starvation 상황과 starvation 해결 결과 확인 코드.  
+#9 "userapplication.c": 서로 다른 우선순위의 프로세스 실행 프로그램. 'proc.c'에서 추가한 3가지 함수를 통해 starvation 상황과 starvation 해결 이후 결과를 확인하였다.  
 
