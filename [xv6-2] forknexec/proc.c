@@ -682,7 +682,7 @@ int forknexec(const char *path, const char **args)
 	  curproc->state = RUNNABLE;
 	  release(&ptable.lock);
 	  
-	  wait(); //avoid zombie
+	  wait(); 
 	  
 	  return saved_pid;  	//자식 pid return
 
