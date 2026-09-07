@@ -5,8 +5,8 @@
 1. 기존의 proc.c에 forknexec 함수를 추가하였다. 
   (forknexec(): 자식 프로세스를 생성하고 즉시 실행하는 함수)   
 2. 실행을 위해 proc.c 파일에 해당 함수를 추가하고 새로운 system call을 등록하였다. 이를 통해 user mode에서 함수를 호출하고 kernel mode로 전환하여 함수가 실행되며, 실행 이후 user mode로 다시 돌아오게 된다.
-
-#### *추가 수정 사항(2026.09.08)  
+---
+### __<추가 수정 사항(2026.09.08)>__ 
 - 문제 지점: 자식 프로세스를 RUNNABLE 상태로 만들기 전에 forknexec()에서 switchuvm(curproc) 수행하였다.  
 - 발생 문제: 현재 실행 중인 프로세스(부모 프로세스)와 CPU active page table 일치하지 않음을 확인하였다.
   - cprintf()를 사용하여 부모와 자식 프로세스의 PID와 pgdir, CPU의 CR3 값을 출력해 비교해 본 결과, 실행 프로세스는 부모 프로세스였지만 CR3는 자식 프로세스의 pgdir을 가리키고 있었다. 
@@ -14,7 +14,7 @@
   - forknexec(): 자식 프로세스의 PCB와 user image를 구성 -> RUNNABLE로 설정.
   - scheduler(): 자식 프로세스를 실행 시, switchuvm(자식 프로세스의 페이지 테이블 활성화) <br> -> RUNNING 상태로 변환
     -> swtch 작업(context switch) 수행.
- 
+--- 
 <br>
 
 #1 "Makefile": 테스트를 위한 userapplication.c 추가  
