@@ -571,13 +571,7 @@ int forknexec(const char *path, const char **args)
 
 	  //pid = np->pid;
 	  curproc=np; 
-/*
-	//추가 처리 과정 이후 실행해야하는 코드여서 주석처리.
-	  acquire(&ptable.lock);
-	  np->state = RUNNABLE;
-	  release(&ptable.lock);
-*/
-	  
+	
 	  //exec.c code
 	  char *s, *last;
 	  int off;
@@ -673,8 +667,6 @@ int forknexec(const char *path, const char **args)
 	  
 	  int saved_pid=curproc->pid;
 	  
-	  // activate child process virtual memory
-	  switchuvm(curproc);
 	  freevm(oldpgdir);
 
 	 // child process -> RUNNABLE(주석 처리된 부분이 해당 위치에서 실행)
