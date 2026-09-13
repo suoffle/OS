@@ -140,8 +140,6 @@ userinit(void)
   p->tf->eflags = FL_IF;
   p->tf->esp = PGSIZE;
   p->tf->eip = 0;  // beginning of initcode.S
-  p->priority=5;   //priority 초기화
-  p->age=0;	   //age 초기화
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
@@ -344,6 +342,7 @@ scheduler(void)
     
     int min_priority=11;
     priority_p=0;
+	int find_proc=0; //Aging 조건 만족 프로세스 발견 여부
     
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
@@ -351,17 +350,19 @@ scheduler(void)
       
       if(p->state==RUNNABLE)
       	p->age++;	//모든 실행 가능한 프로세스의 age값 증가 
-      
-      //starvation 해결을 위한 높은 age 프로세스 실행
-      if(p->age>100){
-      	priority_p=p;
-      	break;
-      }
-      //우선 순위가 높은 프로세스 탐색
-      if(p->priority < min_priority){
-      	min_priority=p->priority;
-      	priority_p=p;
-      }
+
+	  if(!find_proc){
+	      //starvation 해결을 위한 높은 age 프로세스 실행
+	      if(p->age>100){
+	      	priority_p=p;
+	      	find_proc=1;  //Aging 조건 만족 프로세스 발견
+	      }
+	      //우선 순위가 높은 프로세스 탐색
+	      if(p->priority < min_priority){
+	      	min_priority=p->priority;
+	      	priority_p=p;
+	      }
+	  }
     }
     
       //priority_p 존재하지 않을 시
@@ -374,11 +375,11 @@ scheduler(void)
       c->proc = priority_p;
       switchuvm(priority_p);
       priority_p->state = RUNNING;
+	  priority_p->age=0;	//프로세스 실행 시 age는 0으로 초기화
       swtch(&(c->scheduler), priority_p -> context);
       switchkvm();
 	release(&ptable.lock); 
-      c->proc = 0;
-	
+      c->proc = 0;	
   }
 }
 
@@ -594,12 +595,6 @@ int forknexec(const char *path, const char **args)
 
 	  //pid = np->pid;
 	  curproc=np;
-/*
-	//스케줄러가 대신 해주는 부분이라 생략
-	  acquire(&ptable.lock);
-	  np->state = RUNNABLE;
-	  release(&ptable.lock);
-*/
 	  
 	  //exec.c code
 	  char *s, *last;
@@ -694,18 +689,16 @@ int forknexec(const char *path, const char **args)
 	  curproc->tf->eip = elf.entry;  // main
 	  curproc->tf->esp = sp;
 	  
-	  int saved_pid=curproc->pid;
+	  int saved_pid=curproc->pid; // 자식 pid
 	  
-	  //현재 process에 다시 부모 process로 바꿔주기
-	  switchuvm(curproc);
 	  freevm(oldpgdir);
 
-	 //parent process 다시 실행
+	 //자식 프로세스 RUNNABLE 상태로 전환
 	  acquire(&ptable.lock);
 	  curproc->state = RUNNABLE;
 	  release(&ptable.lock);
 	  
-	  wait(); //avoid zombie
+	  wait(); //부모 wait 수행(스케줄러 호출 -> 자식 프로세스 종료 후 다시 실행)
 	  //자식 pid return
 	  return saved_pid;
 
