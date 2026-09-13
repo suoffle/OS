@@ -9,7 +9,7 @@
 - userinit: priority와 age 초기화 코드 제거.  
    - 해결: userinit()에서 실행하는 allocproc()에서 prioriy와 age를 동일하게 초기화함으로 중복 작업 제거.
     
-- scheduler: age 임계값을 넘은 프로세스 발견 이후의 RUNNABLE 프로세스 age를 증가되지 않는 문제 발견.
+- scheduler: age 임계값을 넘은 프로세스 발견 이후, 다음 RUNNABLE 프로세스 age가 증가되지 않는 문제 발견.
    - 원인: break문으로 인해 priority_p 프로세스 저장 후 반복문이 종료되어 age가 증가되지 않은 프로세스들 발생.
    - 해결: break 대신 find_proc flag 사용. find_proc이 1인 경우 aging 프로세스 선택 과정과 우선순위 높은 프로세스 탐색 과정 생략.
    
@@ -18,7 +18,7 @@
 ---
 
 #1 "proc.c": 
-  - userinit(): 프로세스의 priority는 5, age는 0으로 초기화하는 코드를 추가하였다.
+  - allocproc(): 생성되는 프로세스의 priority=5, age=0를 초기화하였다.
   - set_proc_priority(): 프로세스 우선순위 지정 함수를 추가하였다.
   - get_proc_priority(): 프로세스 우선순위 리턴 함수를 추가하였다.
   - get_proc_age(): 프로세스 age 값 리턴 함수를 추가하였다.
