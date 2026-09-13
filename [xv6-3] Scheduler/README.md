@@ -16,7 +16,6 @@
 - scheduler: age 초기화 작업의 부재 확인.
    - 해결: 다음에 실행하고자 하는 프로세스의 상태를 RUNNING으로 전환한 직후에 age를 0으로 초기화.
 ---
-<br>
 
 #1 "proc.c": 
   - userinit(): 프로세스의 priority는 5, age는 0으로 초기화하는 코드를 추가하였다.
