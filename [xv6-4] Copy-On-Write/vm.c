@@ -317,25 +317,17 @@ copyuvm(pde_t *pgdir, uint sz)	//pgdir: 부모 프로세스 페이지 디렉토�
   pde_t *d;
   pte_t *pte;
   uint pa, i, flags;
-  //char *mem;
 
   if((d = setupkvm()) == 0)
     return 0;
   for(i = 0; i < sz; i += PGSIZE){	//부모 페이지 테이블 확인 및 복사
-    if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)	//walkpgdir: 가상주소(i)->PTE->pte
+    if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)	//부모 pte
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
     
-    *pte &= (~PTE_W);		//write 권한 제외
     pa = PTE_ADDR(*pte);	//parent physical address(PTE -> 물리 주소)
-    flags = PTE_FLAGS(*pte);	//PTE -> flag(페이지 속성)
-    
-    /*
-    if((mem = kalloc()) == 0)	//새로운 페이지 할당
-      goto bad;
-    memmove(mem, (char*)P2V(pa), PGSIZE);	//부모 페이지 데이터 복사
-    */
+    flags = PTE_FLAGS(*pte) & ~PTE_W;	//PTE -> flag(페이지 속성)
     
     //페이지 매핑
     if(mappages(d, (void*)i, PGSIZE, pa, flags) < 0) {
@@ -343,8 +335,12 @@ copyuvm(pde_t *pgdir, uint sz)	//pgdir: 부모 프로세스 페이지 디렉토�
     }
     //increase count
     inc_refcount(pa); 		//physical address
-    
   }
+	for(i = 0; i < sz; i +=PGSIZE){		//부모 write 권한 제거
+		pte = walkpgdir(pgdir, (void*)i, 0);
+		*pte &= ~PTE_W;
+	}
+
   lcr3(V2P(pgdir));
   return d;
 
@@ -401,11 +397,12 @@ pagefault(void)
 	uint pf_pa;	//page fault physical address
 	uint ref_cnt;	//reference counter
 		
-	if((pf_va=rcr2())<0){
+	if((pf_va=PGROUNDDOWN(rcr2()))<0){
 		panic("pagefault_rcr2");
 		return;
 	}
 	pte_t *pte = walkpgdir(myproc()->pgdir, (void*)pf_va, 0);	//물리 주소 가져오기
+	if(pte==0 || !(*pte & PTE_P)){ cprintf("pagefault eeeeerror\n"); myproc()->killed=1; return; }
 	pf_pa=PTE_ADDR(*pte);
 	ref_cnt=get_refcount(pf_pa);
 	
@@ -417,12 +414,17 @@ pagefault(void)
 	      return;
 	     }
 	    memmove(mem, (char*)P2V(pf_pa), PGSIZE);	
-	    
-	    *pte=V2P(mem) | PTE_P | PTE_U | PTE_W;			//쓰기 권한 추가
-	    dec_refcount(pf_pa); 
-	    
+
+		//Write 권한만 추가
+		uint flags = PTE_FLAGS(*pte);
+	    flags |= PTE_W;
+	    *pte = V2P(mem) | flags;
+		kfree(P2V(pf_pa));
+		
 	} else if(ref_cnt==1){
 		*pte |= PTE_W;
+	} else{
+		panic("pagefault ref_cnt error");
 	}
 	
 	lcr3(V2P(myproc()->pgdir));	//TLB 업데이트
