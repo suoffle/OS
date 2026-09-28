@@ -8,13 +8,10 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "spinlock.h"
-uint num_free_pages;	//free page 개수
-uint pgrefcount[PHYSTOP>>PTXSHIFT]; //물리 메모리[i] 참조 횟수(page number reference count)
 
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
                    // defined by the kernel linker script in kernel.ld
-
 struct run {
   struct run *next;
 };
@@ -23,6 +20,8 @@ struct {
   struct spinlock lock;
   int use_lock;
   struct run *freelist;
+	uint num_free_pages;	//free page 개수
+	uint pgrefcount[PHYSTOP>>PTXSHIFT]; //물리 메모리 참조 횟수
 } kmem;
 
 // Initialization happens in two phases.
@@ -35,7 +34,7 @@ kinit1(void *vstart, void *vend)
 {
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
-  num_free_pages=0;	//num_free_page initialize
+  kmem.num_free_pages=0;	//num_free_page initialize
   freerange(vstart, vend);
 }
 
@@ -52,7 +51,7 @@ freerange(void *vstart, void *vend)
   char *p;
   p = (char*)PGROUNDUP((uint)vstart);
   for(; p + PGSIZE <= (char*)vend; p += PGSIZE){
-    pgrefcount[V2P(p)>>PTXSHIFT]=0;	//page reference counter initialize
+    kmem.pgrefcount[V2P(p)>>PTXSHIFT]=1;	//page reference counter initialize
     
     kfree(p);
   }
@@ -67,32 +66,31 @@ void
 kfree(char *v)	//v는 물리 메모리 페이지의 가상 주소
 {
   struct run *r;
+  uint index;
 
   if((uint)v % PGSIZE || v < end || V2P(v) >= PHYSTOP)
     panic("kfree");
+
+  index = V2P(v) >> PTXSHIFT;	//물리 페이지 번호
 
   // Fill with junk to catch dangling refs.
   //memset(v, 1, PGSIZE);
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
-    
-  if(get_refcount(V2P(v))>0){
-  	dec_refcount(V2P((v)));	//decrease physical memory page count  
-   } 
-  if(get_refcount(V2P(v))==0){
+
+	if(kmem.pgrefcount[index]==0)
+  	panic("kfree pgrefcount 0");
+
+	kmem.pgrefcount[index]--;	//참조 횟수 배열에 직접 접근
+
+  if(kmem.pgrefcount[index]==0){
   	memset(v, 1, PGSIZE);
   	r=(struct run*)v;
   	r->next=kmem.freelist;
   	kmem.freelist=r;
-  	num_free_pages++;
+  	kmem.num_free_pages++;
   }
-  
-  //r = (struct run*)v;
-  //r->next = kmem.freelist;
-  //kmem.freelist = r;
-  
-  //num_free_pages++;	//free page number++
   
   if(kmem.use_lock)
     release(&kmem.lock);
@@ -109,14 +107,15 @@ kalloc(void)
   if(kmem.use_lock)
     acquire(&kmem.lock);
   
-  if(num_free_pages>0)
-  	num_free_pages--; 
+  //if(num_free_pages>0)    //페이지 할당 후 처리(*)
+  //	num_free_pages--; 
   
   r = kmem.freelist;
   if(r){
     kmem.freelist = r->next;
-    pgrefcount[V2P(r)>>PTXSHIFT]=1; 
-    }
+    kmem.pgrefcount[V2P(r)>>PTXSHIFT]=1; 
+	kmem.num_free_pages--;	//여기서 처리(*)
+  }
   
   if(kmem.use_lock)
     release(&kmem.lock);
@@ -124,23 +123,46 @@ kalloc(void)
   
 }
 
+//get free page count
+uint
+get_num_free_pages(void)
+{	
+	uint n;
+	
+	acquire(&kmem.lock);
+	n = kmem.num_free_pages;
+	release(&kmem.lock);
+	
+	return n;
+}
+
 //get page reference counter
 uint
 get_refcount(uint pa)	//physical address
 {
-	return pgrefcount[pa>>PTXSHIFT];
+	uint count;
+	
+	acquire(&kmem.lock);
+	count = kmem.pgrefcount[pa>>PTXSHIFT];
+	release(&kmem.lock);
+	
+	return count;
 }
 
 //increase page reference counter
 void
 inc_refcount(uint pa)	//physical address
 {
-	pgrefcount[pa>>PTXSHIFT]++;
+	acquire(&kmem.lock);
+	kmem.pgrefcount[pa>>PTXSHIFT]++;
+	release(&kmem.lock);
 }
 
 //decrease page reference counter
 void
 dec_refcount(uint pa)	//physical address
 {
-	pgrefcount[pa>>PTXSHIFT]--;
+	acquire(&kmem.lock);
+	kmem.pgrefcount[pa>>PTXSHIFT]--;
+	release(&kmem.lock);
 }
