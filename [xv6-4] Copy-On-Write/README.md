@@ -14,6 +14,46 @@
 부모 프로세스의 PTE와 자식 프로세스의 PTE가 가리키는 물리 페이지 중 write가 발생한 물리 페이지를 가리키는 주소가 달라진다.   
 
 ---
+### __<추가 수정 사항>__
+__1) "kalloc.c"__
+- kmem 구조체: num_free_pages, pgrefcount를 전역변수 -> kmem 구조체 멤버로 변경.
+  - 이유: 물리 페이지를 할당하고 해제하는 과정에서 kmem 구조체에 있는 free list가 같이 수정됨. 따라서 3개의 변수가 동일한 락을 통해 관리되는 것이 맞다고 판단.
+- freerange(): 페이지 참조 횟수 초기화는 1로 수정.
+  - 이유: 0인 경우를 오류로 처리하기 위해 수정하였음.
+- kfree():
+  - pgrefcount 값이 0인 경우 -> 오류로 처리.
+  - pgrefcount 값이 1 이상인 경우 -> 감소했을 때 0이면 free list에 넣고 num_free_pages 1 증가.
+  - kmem.lock 획득 중에 get_refcount() 함수 호출 대신 변수에 직접 접근하도록 수정.
+    - 이유: kmem.lock 획득 중에 get_refcount() 함수를 호출하면 동일한 락을 획득하게 됨. (애초에 기본 xv6 spinlock은 중복 획득 불가)
+- kalloc(): 기존 num_free_pages-- 위치 수정.
+  - 이유: 실제 메모리 할당 이후 free page 수 감소시키는 것이 순서에 맞다고 판단하여 수정.
+- get_refcount(), inc_refcount(), dec_refcount(): kmem 구조체에 포함된 lock을 사용해 kmem 멤버 pgrefcount 값 보호.
+  - 이유: 공유 물리 페이지는 여러 CPU의 프로세스가 동시 접속이 가능한 상태임으로 락 획득이 필요함.
+- get_num_free_pages(): 새로운 커널 내부 함수 등록
+  - 전역 변수로 존재하던 num_free_pages가 구조체에 포함되면서 extern으로 참조하던 외부에서 오류 발생 -> 외부에서 호출해서 사용할 수 있는 함수 생성.      
+   <br>
+__2) "vm.c"__
+- copyuvm(): 부모 PTE에서 쓰기 권한을 제거하는 위치를 모든 자식 PTE 매핑 성공 후로 수정.
+  - 이유: 매핑 실패 시 부모 PTE 권한을 복구하지 않는 문제 확인.
+- pagefault(): COW 처리 시, 'PTE_P | PTE_U | PTE_W' 권한 직접 설정하던 것을 '기존 flag + PTE_W'로 수정.<br><br>   
+
+__3) "defs.h"__
+- get_num_free_pages(void) 커널 내부 함수 추가.  <br> <br> 
+
+__4) "sysproc.c"__
+- 시스템콜 getNumFreePages 진입 함수를 커널 내부 함수와 연결.
+<br>
+
+```
++ 메모
+
+1) xv6는 하나의 프로세스가 하나의 CPU에서만 실행이 가능하기 때문에 pte에 lock을 잡아야 하는 경우 거의 존재하지 않음.
+2) 물리 메모리는 여러 프로세스가 동시에 접근할 수 있기 때문에 lock을 통해 관리가 필요함.
+3) num_free_pages, pgrefcount에 관해서 kmem과 다른 lock으로 처리하는 경우, lock 순서에 주의 필요.
+4) 이미 락이 걸려 있는 상황에서 동일한 락을 잡는 경우를 회피하기 위해 직접적인 변수에 접근함, 아닌 경우는 함수를 통해 락을 잡아 보호.
+```
+
+---
 
 #1 "kalloc.c": free page의 개수(num_free_pages)와 각 물리 주소에 해당하는 메모리 참조 횟수(pgrefcount)를 선언 및 초기화하였다.  
   - kalloc() -> num_free_pages를 1 감소하고 pgrefcount 값을 초기화한다.   
