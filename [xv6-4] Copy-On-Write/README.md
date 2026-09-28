@@ -51,7 +51,7 @@ __4) "sysproc.c"__
 2) 물리 메모리는 여러 프로세스가 동시에 접근할 수 있기 때문에 lock을 통해 관리가 필요함.
 3) num_free_pages, pgrefcount에 관해서 kmem과 다른 lock으로 처리하는 경우, lock 순서에 주의 필요.
 4) 이미 락이 걸려 있는 상황에서 동일한 락을 잡는 경우를 회피하기 위해 직접적인 변수에 접근함, 아닌 경우는 함수를 통해 락을 잡아 보호.
-5) xv6 spinlock은 acquire()에서 인터럽트를 끄고, release에서 인터럽트 다시 복구시킴.(deadlock 방지)
+5) xv6 spinlock은 acquire()에서 인터럽트를 끄고, release()에서 인터럽트 다시 복구시킴.(deadlock 방지)
 ```
 
 ---
