@@ -402,7 +402,11 @@ pagefault(void)
 		return;
 	}
 	pte_t *pte = walkpgdir(myproc()->pgdir, (void*)pf_va, 0);	//물리 주소 가져오기
-	if(pte==0 || !(*pte & PTE_P)){ cprintf("pagefault eeeeerror\n"); myproc()->killed=1; return; }
+	if(pte==0 || !(*pte & PTE_P) || !(*pte & PTE_U)){ 
+		cprintf("pagefault error\n"); 
+		myproc()->killed=1; 
+		return; 
+	}
 	pf_pa=PTE_ADDR(*pte);
 	ref_cnt=get_refcount(pf_pa);
 	
