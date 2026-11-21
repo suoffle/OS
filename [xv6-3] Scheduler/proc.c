@@ -89,6 +89,7 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->priority=5; //priority 초기화
+  p->aging_priority = p->priority; //스케줄러와 aging 작업에서 참조될 변수
   p->age=0;	 //age 초기화
 
   release(&ptable.lock);
@@ -140,6 +141,8 @@ userinit(void)
   p->tf->eflags = FL_IF;
   p->tf->esp = PGSIZE;
   p->tf->eip = 0;  // beginning of initcode.S
+  //p->priority=5;   //priority 초기화			//////////////
+  //p->age=0;	   //age 초기화				//////////////
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
@@ -190,7 +193,8 @@ fork(void)
   if((np = allocproc()) == 0){
     return -1;
   }
-  np->priority=curproc->priority;	//부모 process priority 복사
+  np->priority=curproc->priority;	 //부모 process priority 복사
+  np->aging_priority = np->priority; //aging_priority도 복사
 
   // Copy process state from proc.
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
@@ -305,6 +309,7 @@ wait(void)
       }
     }
 
+	  
     // No point waiting if we don't have any children.
     if(!havekids || curproc->killed){
       release(&ptable.lock);
@@ -333,6 +338,7 @@ scheduler(void)
   struct cpu *c = mycpu();
   c->proc = 0;
   
+  
   for(;;){
     // Enable interrupts on this processor.
     sti();
@@ -340,30 +346,39 @@ scheduler(void)
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
     
-    int min_priority=11;
     priority_p=0;
-	int find_proc=0; //Aging 조건 만족 프로세스 발견 여부
+    //int find_proc = 0;
     
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
       
-      if(p->state==RUNNABLE)
-      	p->age++;	//모든 실행 가능한 프로세스의 age값 증가 
+      
+      p->age++;	//모든 실행 가능한 프로세스의 age값 증가 
+      
+     //대기 횟수가 임계값을 넘으면 우선순위 1 증가(최고 우선순위 10은 aging을 통해 도달 불가(최대 9까지 가능))
+ if(p->age > 100 && p->aging_priority < 9){
+    p->aging_priority++;
+    p->age=0;
+    //cprintf("\nFind Aging process -> pid: %d[age: %d]\n\n", priority_p->pid, priority_p->age);    	    
+ }
 
-	  if(!find_proc){
-	      //starvation 해결을 위한 높은 age 프로세스 실행
-	      if(p->age>100){
-	      	priority_p=p;
-	      	find_proc=1;  //Aging 조건 만족 프로세스 발견
-	      }
-	      //우선 순위가 높은 프로세스 탐색
-	      if(p->priority < min_priority){
-	      	min_priority=p->priority;
-	      	priority_p=p;
-	      }
-	  }
-    }
+ //우선순위가 높은 프로세스 결정
+ if(priority_p == 0 || p->aging_priority > priority_p->aging_priority){
+    priority_p=p;
+ }
+		
+      /*
+      if(find_proc){
+      	////////////////////////////////////////////////////////////////////////////////////
+      		struct proc *cp;
+      		char *states[6] = {"UNUSED", "EMBRYO", "SLEEPING", "RUNNABLE", "RUNNING", "ZOMBIE"};
+	      	cprintf("\n[scheduler]check age: \n");
+	      	for(cp = ptable.proc; cp < &ptable.proc[NPROC-50]; cp++){
+	      	cprintf("%d[%s]/%d[%d] ", cp->pid, states[cp->state], cp->age, cp->priority); }
+	      	cprintf("\n");      
+      }*/      
+    } 
     
       //priority_p 존재하지 않을 시
       if(priority_p==0){
@@ -375,11 +390,19 @@ scheduler(void)
       c->proc = priority_p;
       switchuvm(priority_p);
       priority_p->state = RUNNING;
-	  priority_p->age=0;	//프로세스 실행 시 age는 0으로 초기화
+      priority_p->age=0; ////////////////age reset
+      //cprintf("\n[a] priority pid: %d, age: %d\n", priority_p->pid, priority_p->age);
       swtch(&(c->scheduler), priority_p -> context);
       switchkvm();
-	release(&ptable.lock); 
-      c->proc = 0;	
+      
+      //우선순위가 5-8인 경우는 실행 후 초기 우선순위로 복원
+      if(priority_p->priority >= 5 && priority_p -> priority <= 8){
+      	priority_p->aging_priority = priority_p->priority;
+      }
+      
+      release(&ptable.lock); 
+      c->proc = 0;
+	
   }
 }
 
@@ -427,6 +450,8 @@ forkret(void)
   static int first = 1;
   // Still holding ptable.lock from scheduler.
   release(&ptable.lock);
+  
+  //cprintf("[forkret] process pgdir: %p\n", myproc()->pgdir);   /////////////////
 
   if (first) {
     // Some initialization functions must be run in the context
@@ -562,13 +587,22 @@ procdump(void)
 }
 
 
+static inline uint
+rcr3(void)
+{
+  uint val;
+  asm volatile("movl %%cr3, %0" : "=r" (val));
+  return val;
+}
+
 int forknexec(const char *path, const char **args)
 {
 	//fork.c
 	int i;
 	  struct proc *np;
 	  struct proc *curproc = myproc();
-
+	
+	//cprintf("forknexec head: parent process pgdir: %p\n", myproc()->pgdir);
 	  // Allocate process.
 	  if((np = allocproc()) == 0){
 	    return -2;
@@ -595,6 +629,11 @@ int forknexec(const char *path, const char **args)
 
 	  //pid = np->pid;
 	  curproc=np;
+/*
+	  acquire(&ptable.lock);
+	  np->state = RUNNABLE;
+	  release(&ptable.lock);
+*/
 	  
 	  //exec.c code
 	  char *s, *last;
@@ -689,16 +728,42 @@ int forknexec(const char *path, const char **args)
 	  curproc->tf->eip = elf.entry;  // main
 	  curproc->tf->esp = sp;
 	  
-	  int saved_pid=curproc->pid; // 자식 pid
+	  int saved_pid=curproc->pid;
 	  
-	  freevm(oldpgdir);
+	  
+	//uint before_cr3;
+	//uint after_cr3;
+	//uint parent_pgdir_pa;
+	//uint child_pgdir_pa;
 
-	 //자식 프로세스 RUNNABLE 상태로 전환
+	//parent_pgdir_pa = V2P(myproc()->pgdir);
+	//child_pgdir_pa = V2P(np->pgdir);
+
+	//before_cr3 = rcr3();
+
+	  
+	//switchuvm(curproc);
+	freevm(oldpgdir);
+	  
+	//after_cr3 = rcr3();
+
+	//cprintf("parent pid=%d, child pid=%d\n",myproc()->pid, np->pid);
+	//cprintf("parent pgdir PA = %p\n", parent_pgdir_pa);
+	//cprintf("child  pgdir PA = %p\n", child_pgdir_pa);
+
+	//cprintf("CR3 before      = %p\n", before_cr3);
+	//cprintf("CR3 after       = %p\n", after_cr3);
+	  
+	 //parent process 다시 실행
 	  acquire(&ptable.lock);
 	  curproc->state = RUNNABLE;
+	  //cprintf("child process pgdir: %p\n", curproc->pgdir);
 	  release(&ptable.lock);
 	  
-	  wait(); //부모 wait 수행(스케줄러 호출 -> 자식 프로세스 종료 후 다시 실행)
+	  wait(); //avoid zombie
+	  //cprintf("forknexec tail: parent process pgdir: %p\n", myproc()->pgdir);
+
+	  
 	  //자식 pid return
 	  return saved_pid;
 
@@ -715,11 +780,15 @@ int forknexec(const char *path, const char **args)
 
 int set_proc_priority(int pid, int priority){
 	struct proc *p;
-
+	
+	if(priority < 1 || priority > 10) return -1;
+	
 	acquire(&ptable.lock);
 	for(p=ptable.proc;p<&ptable.proc[NPROC];p++){
 		if(p->pid==pid){
 			p->priority=priority;
+			p->aging_priority = priority;
+			p->age = 0;
 			release(&ptable.lock);
 			return 0;
 		}
@@ -757,5 +826,4 @@ int get_proc_age(int pid){
 	release(&ptable.lock);
 	return -1;
 }
-
 
