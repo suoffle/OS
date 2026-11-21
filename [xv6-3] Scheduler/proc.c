@@ -396,7 +396,7 @@ scheduler(void)
       switchkvm();
       
       //우선순위가 5-8인 경우는 실행 후 초기 우선순위로 복원
-      if(priority_p->priority >= 5 && priority_p -> priority <= 8){
+      if(priority_p->priority >= 1 && priority_p -> priority <= 8){
       	priority_p->aging_priority = priority_p->priority;
       }
       
